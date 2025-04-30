@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <algorithm> // для std::find
 
 #pragma comment(lib, "advapi32")
 
@@ -15,7 +16,10 @@ const std::vector<std::string> OBJECTS = {
     "object6.txt", "object7.txt", "object8.txt", "object9.txt", "object10.txt"
 };
 
-// Hashes the login + password using SHA-1
+// Тип для ACL
+using AccessControlList = std::map<std::string, std::map<std::string, std::string>>;
+
+// Хешування пароля
 std::vector<BYTE> hashPassword(const std::string& login, const std::string& password) {
     HCRYPTPROV hProv = 0;
     HCRYPTHASH hHash = 0;
@@ -43,6 +47,7 @@ std::vector<BYTE> hashPassword(const std::string& login, const std::string& pass
     return hashVal;
 }
 
+// Збереження користувачів
 void saveUsersToFile(const std::map<std::string, std::vector<BYTE>>& users) {
     std::ofstream file(DB_FILE, std::ios::binary);
     size_t count = users.size();
@@ -56,6 +61,7 @@ void saveUsersToFile(const std::map<std::string, std::vector<BYTE>>& users) {
     }
 }
 
+// Завантаження користувачів
 std::map<std::string, std::vector<BYTE>> loadUsersFromFile() {
     std::map<std::string, std::vector<BYTE>> users;
     std::ifstream file(DB_FILE, std::ios::binary);
@@ -77,11 +83,8 @@ std::map<std::string, std::vector<BYTE>> loadUsersFromFile() {
     return users;
 }
 
-// Access Control List
-// acl[object][user] = "rwo" — read/write/owner
-using ACL = std::map<std::string, std::map<std::string, std::string>>;
-
-void saveACL(const ACL& acl) {
+// Збереження ACL
+void saveACL(const AccessControlList& acl) {
     std::ofstream file(ACL_FILE);
     for (const auto& [object, users] : acl) {
         for (const auto& [user, rights] : users) {
@@ -90,8 +93,9 @@ void saveACL(const ACL& acl) {
     }
 }
 
-ACL loadACL() {
-    ACL acl;
+// Завантаження ACL
+AccessControlList loadACL() {
+    AccessControlList acl;
     std::ifstream file(ACL_FILE);
     std::string object, user, rights;
     while (file >> object >> user >> rights) {
@@ -100,16 +104,19 @@ ACL loadACL() {
     return acl;
 }
 
+// Перевірка права
+bool hasRight(const std::string& rights, char right) {
+    return rights.find(right) != std::string::npos;
+}
+
+// Вивід об’єктів
 void listObjects() {
     std::cout << "Available objects:\n";
     for (const auto& obj : OBJECTS) std::cout << " - " << obj << "\n";
 }
 
-bool hasRight(const std::string& rights, char right) {
-    return rights.find(right) != std::string::npos;
-}
-
-void interactWithObject(const std::string& login, ACL& acl) {
+// Основна взаємодія
+void interactWithObject(const std::string& login, AccessControlList& acl) {
     listObjects();
     std::string obj, action;
     std::cout << "Enter object name: ";
@@ -120,6 +127,7 @@ void interactWithObject(const std::string& login, ACL& acl) {
         return;
     }
 
+
     if (acl[obj].find(login) == acl[obj].end()) {
         std::cout << "You have no access to this object.\n";
         return;
@@ -128,32 +136,43 @@ void interactWithObject(const std::string& login, ACL& acl) {
     std::cout << "Enter action (read/write/grant): ";
     std::getline(std::cin, action);
 
-    if (action == "read" && hasRight(acl[obj][login], 'r')) {
-        std::ifstream f(obj);
-        std::string line;
-        std::cout << "Contents of " << obj << ":\n";
-        while (std::getline(f, line)) std::cout << line << '\n';
-        f.close();
-    } else if (action == "write" && hasRight(acl[obj][login], 'w')) {
-        std::ofstream f(obj, std::ios::app);
-        std::string text;
-        std::cout << "Enter text to append: ";
-        std::getline(std::cin, text);
-        f << login << ": " << text << "\n";
-        f.close();
-    } else if (action == "grant" && hasRight(acl[obj][login], 'o')) {
-        std::string otherUser, newRights;
-        std::cout << "Grant rights to (username): ";
-        std::getline(std::cin, otherUser);
-        std::cout << "Enter rights (r/w/o): ";
-        std::getline(std::cin, newRights);
-        acl[obj][otherUser] = newRights;
-        std::cout << "Rights granted.\n";
+    if (action == "read") {
+        if (hasRight(acl[obj][login], 'r')) {
+            std::ifstream f(obj);
+            std::string line;
+            std::cout << "Contents of " << obj << ":\n";
+            while (std::getline(f, line)) std::cout << line << '\n';
+        } else {
+            std::cout << "Access denied.\n";
+        }
+    } else if (action == "write") {
+        if (hasRight(acl[obj][login], 'w')) {
+            std::ofstream f(obj, std::ios::app);
+            std::string text;
+            std::cout << "Enter text to append: ";
+            std::getline(std::cin, text);
+            f << login << ": " << text << "\n";
+        } else {
+            std::cout << "Access denied.\n";
+        }
+    } else if (action == "grant") {
+        if (hasRight(acl[obj][login], 'o')) {
+            std::string otherUser, newRights;
+            std::cout << "Grant rights to (username): ";
+            std::getline(std::cin, otherUser);
+            std::cout << "Enter rights (r/w/o): ";
+            std::getline(std::cin, newRights);
+            acl[obj][otherUser] = newRights;
+            std::cout << "Rights granted.\n";
+        } else {
+            std::cout << "Access denied.\n";
+        }
     } else {
-        std::cout << "Access denied.\n";
+        std::cout << "Unknown action.\n";
     }
 }
 
+// Головна функція
 int main() {
     auto users = loadUsersFromFile();
     auto acl = loadACL();
@@ -169,7 +188,7 @@ int main() {
         users[login] = hashPassword(login, password);
         saveUsersToFile(users);
 
-        // make new user owner of first 3 objects
+        // Надати власність на перші 3 об’єкти
         for (int i = 0; i < 3; ++i)
             acl[OBJECTS[i]][login] = "rwo";
 
