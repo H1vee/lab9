@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <algorithm> // для std::find
+#include <algorithm>
 
 #pragma comment(lib, "advapi32")
 
@@ -16,10 +16,8 @@ const std::vector<std::string> OBJECTS = {
     "object6.txt", "object7.txt", "object8.txt", "object9.txt", "object10.txt"
 };
 
-// Тип для ACL
 using AccessControlList = std::map<std::string, std::map<std::string, std::string>>;
 
-// Хешування пароля
 std::vector<BYTE> hashPassword(const std::string& login, const std::string& password) {
     HCRYPTPROV hProv = 0;
     HCRYPTHASH hHash = 0;
@@ -47,7 +45,6 @@ std::vector<BYTE> hashPassword(const std::string& login, const std::string& pass
     return hashVal;
 }
 
-// Збереження користувачів
 void saveUsersToFile(const std::map<std::string, std::vector<BYTE>>& users) {
     std::ofstream file(DB_FILE, std::ios::binary);
     size_t count = users.size();
@@ -61,7 +58,6 @@ void saveUsersToFile(const std::map<std::string, std::vector<BYTE>>& users) {
     }
 }
 
-// Завантаження користувачів
 std::map<std::string, std::vector<BYTE>> loadUsersFromFile() {
     std::map<std::string, std::vector<BYTE>> users;
     std::ifstream file(DB_FILE, std::ios::binary);
@@ -83,7 +79,6 @@ std::map<std::string, std::vector<BYTE>> loadUsersFromFile() {
     return users;
 }
 
-// Збереження ACL
 void saveACL(const AccessControlList& acl) {
     std::ofstream file(ACL_FILE);
     for (const auto& [object, users] : acl) {
@@ -93,7 +88,6 @@ void saveACL(const AccessControlList& acl) {
     }
 }
 
-// Завантаження ACL
 AccessControlList loadACL() {
     AccessControlList acl;
     std::ifstream file(ACL_FILE);
@@ -104,18 +98,15 @@ AccessControlList loadACL() {
     return acl;
 }
 
-// Перевірка права
 bool hasRight(const std::string& rights, char right) {
     return rights.find(right) != std::string::npos;
 }
 
-// Вивід об’єктів
 void listObjects() {
     std::cout << "Available objects:\n";
     for (const auto& obj : OBJECTS) std::cout << " - " << obj << "\n";
 }
 
-// Основна взаємодія
 void interactWithObject(const std::string& login, AccessControlList& acl) {
     listObjects();
     std::string obj, action;
@@ -126,7 +117,6 @@ void interactWithObject(const std::string& login, AccessControlList& acl) {
         std::cout << "No such object.\n";
         return;
     }
-
 
     if (acl[obj].find(login) == acl[obj].end()) {
         std::cout << "You have no access to this object.\n";
@@ -172,7 +162,6 @@ void interactWithObject(const std::string& login, AccessControlList& acl) {
     }
 }
 
-// Головна функція
 int main() {
     auto users = loadUsersFromFile();
     auto acl = loadACL();
@@ -188,9 +177,14 @@ int main() {
         users[login] = hashPassword(login, password);
         saveUsersToFile(users);
 
-        // Надати власність на перші 3 об’єкти
-        for (int i = 0; i < 3; ++i)
-            acl[OBJECTS[i]][login] = "rwo";
+        if (login == "admin") {
+            for (const auto& obj : OBJECTS) {
+                acl[obj][login] = "rwo";
+            }
+            std::cout << "Admin has been granted full access to all objects.\n";
+        } else {
+            std::cout << "No access granted to this user. Please wait for the admin to assign rights.\n";
+        }
 
         saveACL(acl);
         std::cout << "Registration successful!\n";
